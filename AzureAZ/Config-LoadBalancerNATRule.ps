@@ -1,0 +1,24 @@
+# Azure UI always get problem to create NAt rules, use powershell as workaround.
+
+$RGname = "az-rg-kangxh-oss"
+$NLBName = "kangxhnlbseaoss"
+$NATRule = @{name= "Oracle-kangxhvmseaoss"; ExtPort = 5500; VmPort = 5500; Protocol = "tcp"; TargetVM = "kangxhvmseaoss"}
+$TargetVM = @{name= "kangxhvmseaoss"; RegsourceGroupName = "az-rg-kangxh-oss"}
+
+# Step 1: add a new NAT rule in Load Balancer
+$NLB = Get-AzLoadBalancer -ResourceGroupName $RGname -Name $NLBName 
+$NLB | Add-AzLoadBalancerInboundNatRuleConfig -Name $NATRule.name -FrontendIPConfiguration $NLB.FrontendIpConfigurations[0] -Protocol $NATRule.Protocol -FrontendPort $NATRule.ExtPort -BackendPort $NATRule.VmPort
+$NLB | Set-AzLoadBalancer
+$NLB = Get-AzLoadBalancer -ResourceGroupName $RGname -Name $NLBName 
+
+#Step 2: Associate the new NAT rule to NIC
+
+$natRule  = Get-AzLoadBalancerInboundNatRuleConfig -Name $NATRule.name -LoadBalancer $NLB
+
+$VM = Get-AzVM -Name $TargetVM.name -ResourceGroupName $TargetVM.RegsourceGroupName
+$nic = Get-AzNetworkInterface -ResourceId $VM.NetworkProfile.NetworkInterfaces[0].id
+$ipconfig = $nic | Get-AzNetworkInterfaceIpConfig
+
+$ipconfig.LoadBalancerInboundNatRules.Add(@{"id"=$natRule.Id})
+$nic | Set-AzNetworkInterfaceIpConfig -Name $ipconfig.Name -LoadBalancerInboundNatRule $ipconfig.LoadBalancerInboundNatRules
+$nic | Set-AzNetworkInterface
